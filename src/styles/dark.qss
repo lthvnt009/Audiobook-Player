@@ -1,0 +1,88 @@
+/* Giao diện Tối */
+QWidget {
+    background-color: #2b2b2b;
+    color: #f0f0f0;
+    border: 0px;
+}
+QDialog, QMainWindow {
+    background-color: #3c3f41;
+}
+QGroupBox {
+    background-color: #3c3f41;
+    border: 1px solid #555;
+    border-radius: 4px;
+    margin-top: 1ex;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 3px;
+}
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+    background-color: #45494a;
+    border: 1px solid #555;
+    border-radius: 2px;
+    padding: 2px;
+}
+QPushButton {
+    background-color: #555a5c;
+    border: 1px solid #666;
+    padding: 5px;
+    border-radius: 2px;
+}
+QPushButton:hover {
+    background-color: #666b6d;
+}
+QPushButton:pressed {
+    background-color: #4d5153;
+}
+QTableView {
+    background-color: #3c3f41;
+    gridline-color: #555;
+}
+QTableView::item:selected {
+    background-color: #0078d7;
+    color: white;
+}
+QHeaderView::section {
+    background-color: #555a5c;
+    padding: 4px;
+    border: 1px solid #444;
+}
+QSlider::groove:horizontal {
+    border: 1px solid #555;
+    height: 8px;
+    background: #45494a;
+    margin: 2px 0;
+    border-radius: 4px;
+}
+QSlider::handle:horizontal {
+    background: #888;
+    border: 1px solid #999;
+    width: 16px;
+    margin: -4px 0;
+    border-radius: 8px;
+}
+QSplitter::handle {
+    background: #555a5c;
+}
+QScrollBar:vertical {
+    border: 1px solid #555;
+    background: #3c3f41;
+    width: 15px;
+    margin: 15px 0 15px 0;
+}
+QScrollBar::handle:vertical {
+    background: #555a5c;
+    min-height: 20px;
+}
+QScrollBar:horizontal {
+    border: 1px solid #555;
+    background: #3c3f41;
+    height: 15px;
+    margin: 0 15px 0 15px;
+}
+QScrollBar::handle:horizontal {
+    background: #555a5c;
+    min-width: 20px;
+}
