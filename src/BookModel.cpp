@@ -75,7 +75,7 @@ QVariant BookModel::headerData(int section, Qt::Orientation orientation, int rol
         case 0: return tr("Tên sách ▲");
         case 1: return tr("Tác giả");
         case 2: return tr("Thời gian nghe");
-        case 3: return tr("Tiến độ (%)");
+        case 3: return tr("Tiến độ");
         default: return QVariant();
     }
 }

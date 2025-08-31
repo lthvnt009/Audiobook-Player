@@ -1,7 +1,7 @@
 #include "MainWindow.h"
 #include "LibraryWidget.h"
 #include "PlayerWidget.h"
-#include "DatabaseManager.h" // Thêm header
+#include "DatabaseManager.h"
 
 #include <QApplication>
 #include <QFile>
@@ -14,8 +14,8 @@
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QIcon>
-#include <QDebug> // Thêm header
-#include <QTimer>  // ==================== SỬA LỖI BIÊN DỊCH ====================
+#include <QDebug>
+#include <QTimer>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -23,10 +23,8 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowTitle(tr("Audiobook Player"));
     setWindowIcon(QIcon(":/icons/icon.ico"));
     
-    // Mở và khởi tạo database ngay khi bắt đầu
     if (!DatabaseManager::instance().openDb()) {
         QMessageBox::critical(this, tr("Lỗi Database"), tr("Không thể khởi tạo cơ sở dữ liệu. Ứng dụng sẽ thoát."));
-        // Thoát ứng dụng một cách an toàn
         QTimer::singleShot(0, this, &QWidget::close);
         return;
     }
@@ -50,6 +48,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(libraryWidget, &LibraryWidget::settingsChanged, playerWidget, &PlayerWidget::updateToolTips);
     
     connect(this, &MainWindow::progressUpdated, libraryWidget, &LibraryWidget::onProgressUpdated);
+
+    connect(this, &MainWindow::playbackContextChanged, libraryWidget, &LibraryWidget::onPlaybackContextChanged);
+    connect(playerWidget, &PlayerWidget::playbackStateChanged, playerWidget, &PlayerWidget::updatePlaybackStatusText);
     
 
     createActions();
@@ -121,6 +122,10 @@ void MainWindow::setActionsEnabled(bool enabled)
 
 void MainWindow::onPlayRequest(const BookInfo &book, int chapterIndex)
 {
+    m_currentBook = book;
+    m_currentChapterIndex = chapterIndex;
+    emit playbackContextChanged(m_currentBook, m_currentChapterIndex);
+
     m_settings->setValue("PlaybackStatus/bookPath", book.path);
     m_settings->setValue("PlaybackStatus/chapterIndex", chapterIndex);
 
@@ -148,6 +153,13 @@ void MainWindow::onBackToLibraryRequest()
     playerWidget->stopPlayback();
     stackedWidget->setCurrentWidget(libraryWidget);
     
+    // ==================== BẮT ĐẦU SỬA LỖI ====================
+    // Không xóa trạng thái khi quay lại thư viện.
+    // Chỉ tắt phím tắt toàn cục.
+    // emit playbackContextChanged vẫn được giữ lại trong onPlayRequest và loadSettings
+    // để đảm bảo label được cập nhật đúng lúc.
+    // ===================== KẾT THÚC SỬA LỖI =====================
+
     QString currentBookPath = playerWidget->getCurrentBookPath();
     if (!currentBookPath.isEmpty()) {
         libraryWidget->selectBookByPath(currentBookPath);
@@ -164,7 +176,6 @@ void MainWindow::onLibraryPathSelected(const QString &path)
 
 void MainWindow::onPlaybackPositionChanged(const QString &bookPath, int chapterIndex, qint64 position)
 {
-    // Không còn ghi vào QSettings, chỉ phát tín hiệu để LibraryWidget xử lý
     emit progressUpdated(bookPath, chapterIndex, position);
 }
 
@@ -198,6 +209,11 @@ void MainWindow::loadSettings()
             qreal playbackRate = m_settings->value("BookSpeeds/" + lastBook.path, 1.0).toReal();
             playerWidget->loadBookInfo(lastBook, lastChapterIndex, playbackRate);
             setActionsEnabled(true);
+            
+            m_currentBook = lastBook;
+            m_currentChapterIndex = lastChapterIndex;
+            emit playbackContextChanged(m_currentBook, m_currentChapterIndex);
+
         } else {
             playerWidget->showWelcomeState();
             setActionsEnabled(false);
@@ -220,3 +236,4 @@ void MainWindow::saveSettings()
         m_settings->setValue("PlaybackStatus/chapterIndex", playerWidget->getCurrentChapterIndex());
     }
 }
+

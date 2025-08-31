@@ -3,7 +3,5 @@
     <file alias="styles/dark.qss">styles/dark.qss</file>
     <file alias="styles/light.qss">styles/light.qss</file>
     <file alias="icons/icon.ico">icons/icon.ico</file>
-    <file alias="icons/alarm_inactive.ico">icons/alarm_inactive.ico</file>
-    <file alias="icons/alarm_active.ico">icons/alarm_active.ico</file>
 </qresource>
 </RCC>

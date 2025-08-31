@@ -20,6 +20,7 @@
 #include <QSettings>
 #include <QMessageBox>
 #include <QIcon>
+#include <QPainter>
 
 // Hàm helper để định dạng thời gian
 QString formatTime(qint64 ms) {
@@ -267,8 +268,36 @@ void PlayerWidget::onSleepTimerTimeout()
 
 void PlayerWidget::updateSleepButtonIcon(bool active)
 {
-    QString iconPath = active ? ":/icons/alarm_active.ico" : ":/icons/alarm_inactive.ico";
-    m_sleepButton->setIcon(QIcon(iconPath));
+    // ==================== BẮT ĐẦU THAY ĐỔI ====================
+    // Vẽ icon đồng hồ bằng mã lệnh để đảm bảo tính nhất quán và sửa lỗi thiếu icon.
+    int iconSize = 24;
+    QPixmap pixmap(iconSize, iconSize);
+    pixmap.fill(Qt::transparent); // Nền trong suốt
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing); // Vẽ cho mịn
+
+    // Chọn màu dựa trên trạng thái hẹn giờ
+    QColor clockColor = active ? QColor("#0078d7") : Qt::gray;
+    int centerX = iconSize / 2;
+    int centerY = iconSize / 2;
+
+    // Vẽ mặt đồng hồ (hình tròn)
+    painter.setPen(QPen(clockColor, 2));
+    painter.drawEllipse(2, 2, iconSize - 4, iconSize - 4);
+
+    // Vẽ kim giờ (ngắn, dày)
+    painter.setPen(QPen(clockColor, 2.5));
+    painter.drawLine(centerX, centerY, centerX, centerY - 5); // Hướng lên trên
+
+    // Vẽ kim phút (dài, mỏng)
+    painter.setPen(QPen(clockColor, 1.5));
+    painter.drawLine(centerX, centerY, centerX + 6, centerY); // Hướng sang phải
+
+    painter.end();
+
+    m_sleepButton->setIcon(QIcon(pixmap));
+    // ===================== KẾT THÚC THAY ĐỔI =====================
 }
 
 void PlayerWidget::seekTo(qint64 positionMs)
@@ -385,7 +414,12 @@ void PlayerWidget::loadBookInfo(const BookInfo &book, int chapterIndex, qreal pl
     onSpeedChanged(playbackRate);
 
     const ChapterInfo &chapter = m_currentBook.chapters[m_currentChapterIndex];
-    chapterLabel->setText(tr("Đang phát: %1").arg(chapter.title));
+    
+    // ==================== BẮT ĐẦU THAY ĐỔI ====================
+    // Cập nhật trạng thái text ban đầu.
+    // Trạng thái thực tế sẽ được set trong onEngineStateChanged khi bắt đầu phát.
+    updatePlaybackStatusText(AudioEngine::State::Stopped);
+    // ===================== KẾT THÚC THAY ĐỔI =====================
     
     m_duration = chapter.duration * 1000;
     progressSlider->setRange(0, m_duration);
@@ -431,11 +465,13 @@ void PlayerWidget::playChapter(int chapterIndex, qint64 startPosition)
         return;
     }
     m_currentChapterIndex = chapterIndex;
-    const ChapterInfo &chapter = m_currentBook.chapters[m_currentChapterIndex];
-
-    chapterLabel->setText(tr("Đang phát: %1").arg(chapter.title));
     
-    m_audioEngine->play(chapter.filePath);
+    // ==================== BẮT ĐẦU THAY ĐỔI ====================
+    // Cập nhật text ngay khi bắt đầu một chương mới
+    updatePlaybackStatusText(AudioEngine::State::Playing);
+    // ===================== KẾT THÚC THAY ĐỔI =====================
+    
+    m_audioEngine->play(m_currentBook.chapters[m_currentChapterIndex].filePath);
     if (startPosition > 0) {
         seekTo(startPosition);
     }
@@ -450,7 +486,7 @@ void PlayerWidget::onPlayPauseClicked()
 {
     if (!isBookLoaded()) return;
 
-    if (!m_audioEngine->isRunning()) {
+    if (m_audioEngine->state() == AudioEngine::State::Stopped || m_audioEngine->state() == AudioEngine::State::Finished) {
         playChapter(m_currentChapterIndex, progressSlider->value());
     } else {
         m_audioEngine->togglePause();
@@ -463,8 +499,43 @@ void PlayerWidget::onProgressSliderReleased()
     seekTo(progressSlider->value());
 }
 
+// ==================== BẮT ĐẦU THAY ĐỔI ====================
+// Slot mới để cập nhật text
+void PlayerWidget::updatePlaybackStatusText(AudioEngine::State newState)
+{
+    if (!isBookLoaded()) {
+        chapterLabel->setText("");
+        return;
+    }
+    
+    QString statusText;
+    switch(newState) {
+        case AudioEngine::State::Playing:
+            statusText = tr("Đang phát: %1");
+            break;
+        case AudioEngine::State::Paused:
+            statusText = tr("Tạm dừng: %1");
+            break;
+        case AudioEngine::State::Stopped:
+        case AudioEngine::State::Finished:
+        default:
+            statusText = tr("Sẵn sàng: %1");
+            break;
+    }
+    
+    const ChapterInfo &chapter = m_currentBook.chapters[m_currentChapterIndex];
+    chapterLabel->setText(statusText.arg(chapter.title));
+}
+// ===================== KẾT THÚC THAY ĐỔI =====================
+
+
 void PlayerWidget::onEngineStateChanged(AudioEngine::State newState)
 {
+    // ==================== BẮT ĐẦU THAY ĐỔI ====================
+    // Phát tín hiệu để MainWindow và các widget khác biết
+    emit playbackStateChanged(newState);
+    // ===================== KẾT THÚC THAY ĐỔI =====================
+
     if (newState == AudioEngine::State::Playing) {
         playPauseButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
     } else {
@@ -472,6 +543,7 @@ void PlayerWidget::onEngineStateChanged(AudioEngine::State newState)
     }
 
     if (newState == AudioEngine::State::Finished) {
+        emit playbackPositionChanged(m_currentBook.path, m_currentChapterIndex, m_duration);
         if (isBookLoaded() && m_currentChapterIndex >= m_currentBook.chapters.count() - 1) {
             QMessageBox::information(this, tr("Hoàn thành"), tr("Bạn đã hoàn thành cuốn sách '%1'!").arg(m_currentBook.title));
             emit backToLibraryRequest();
@@ -569,3 +641,4 @@ void PlayerWidget::onSeekFinished()
 {
     m_isSeeking = false;
 }
+

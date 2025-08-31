@@ -10,7 +10,7 @@ class QLabel;
 class QSlider;
 class SpeedControlPopup;
 class TimeInputDialog;
-class SleepTimerDialog; // Thêm khai báo cho dialog mới
+class SleepTimerDialog;
 class QTimer;
 class QSettings;
 
@@ -39,6 +39,11 @@ signals:
     void backToLibraryRequest();
     void playbackPositionChanged(const QString &bookPath, int chapterIndex, qint64 position);
     void playbackRateChanged(const QString &bookPath, qreal rate);
+    // ==================== BẮT ĐẦU THAY ĐỔI ====================
+    // Tín hiệu mới để thông báo trạng thái của AudioEngine
+    void playbackStateChanged(AudioEngine::State newState);
+    // ===================== KẾT THÚC THAY ĐỔI =====================
+
 
 public slots:
     void onPlayPauseClicked();
@@ -47,6 +52,11 @@ public slots:
     void onRewindClicked();
     void onForwardClicked();
     void updateToolTips();
+    // ==================== BẮT ĐẦU THAY ĐỔI ====================
+    // Slot mới để cập nhật text dựa trên trạng thái
+    void updatePlaybackStatusText(AudioEngine::State newState);
+    // ===================== KẾT THÚC THAY ĐỔI =====================
+
 
 private slots:
     void onEngineStateChanged(AudioEngine::State newState);
@@ -59,7 +69,6 @@ private slots:
     void onSpeedChanged(qreal rate);
     void onTimeDisplayButtonClicked();
     void onSeekFinished();
-    // Các slot mới cho tính năng hẹn giờ
     void onSleepButtonClicked();
     void onSetSleepTimer(int minutes);
     void onSleepTimerTimeout();
@@ -70,7 +79,7 @@ private:
     void updateTimeLabels();
     void updateVolumeSliderStyle(int value);
     void seekTo(qint64 positionMs);
-    void updateSleepButtonIcon(bool active); // Hàm helper cập nhật icon
+    void updateSleepButtonIcon(bool active);
 
     // Data
     BookInfo m_currentBook;
@@ -95,7 +104,7 @@ private:
     // UI
     SpeedControlPopup *m_speedPopup;
     TimeInputDialog *m_timeInputDialog;
-    SleepTimerDialog *m_sleepTimerDialog; // Dialog hẹn giờ
+    SleepTimerDialog *m_sleepTimerDialog;
     
     QPushButton *backButton;
     QLabel *coverLabel;
@@ -115,7 +124,6 @@ private:
     QSlider *volumeSlider;
     QLabel *volumeLabel;
     QPushButton *timeDisplayButton;
-    // UI cho hẹn giờ
     QPushButton *m_sleepButton;
     QLabel *m_sleepTimerLabel;
 };

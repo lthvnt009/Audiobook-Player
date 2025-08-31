@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QStyledItemDelegate>
-#include <QModelIndex>
 
 class ButtonDelegate : public QStyledItemDelegate
 {
@@ -10,17 +9,14 @@ class ButtonDelegate : public QStyledItemDelegate
 public:
     explicit ButtonDelegate(QObject *parent = nullptr);
 
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override;
+    void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const override;
+    void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
-    bool editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option, const QModelIndex &index) override;
 
 signals:
     void resetClicked(const QModelIndex &index);
     void doneClicked(const QModelIndex &index);
-
-private:
-    mutable QRect m_resetButtonRect;
-    mutable QRect m_doneButtonRect;
-    
-    mutable QModelIndex m_pressedIndex;
-    mutable int m_pressedButton = -1;
 };
+

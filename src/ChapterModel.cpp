@@ -37,8 +37,10 @@ QVariant ChapterModel::data(const QModelIndex &index, int role) const
             case 3: return QString::number(chapter.size / (1024.0 * 1024.0), 'f', 2) + " MB";
             case 4: {
                 if (chapter.duration == 0) return "0%";
-                int percentage = static_cast<int>((chapter.listenedDuration * 100.0) / (chapter.duration * 1000.0));
-                return QString::number(percentage) + "%";
+                double percentageValue = (static_cast<double>(chapter.listenedDuration) / (static_cast<double>(chapter.duration) * 1000.0)) * 100.0;
+                if (percentageValue > 100.0) percentageValue = 100.0;
+                if (percentageValue < 0.0) percentageValue = 0.0;
+                return QString::number(static_cast<int>(percentageValue)) + "%";
             }
             default: return QVariant();
         }
@@ -116,6 +118,18 @@ void ChapterModel::updateChapter(int chapterIndex)
         emit dataChanged(index(chapterIndex, 4), index(chapterIndex, 4));
     }
 }
+
+// ==================== BẮT ĐẦU SỬA LỖI CẬP NHẬT TIẾN ĐỘ ====================
+void ChapterModel::refreshChapterData(int chapterIndex, const ChapterInfo& updatedInfo)
+{
+    if (chapterIndex >= 0 && chapterIndex < m_chapters.size()) {
+        // Cập nhật dữ liệu nội bộ của model
+        m_chapters[chapterIndex] = updatedInfo;
+        // Thông báo cho view rằng dữ liệu của ô này đã thay đổi
+        emit dataChanged(index(chapterIndex, 4), index(chapterIndex, 4), {Qt::DisplayRole});
+    }
+}
+// ===================== KẾT THÚC SỬA LỖI CẬP NHẬT TIẾN ĐỘ =====================
 
 const ChapterInfo& ChapterModel::getChapterAt(int row) const
 {

@@ -20,6 +20,11 @@ public:
     void clear();
     void updateChapter(int chapterIndex);
 
+    // ==================== BẮT ĐẦU SỬA LỖI CẬP NHẬT TIẾN ĐỘ ====================
+    // Hàm mới để cập nhật dữ liệu của một chương cụ thể
+    void refreshChapterData(int chapterIndex, const ChapterInfo& updatedInfo);
+    // ===================== KẾT THÚC SỬA LỖI CẬP NHẬT TIẾN ĐỘ =====================
+
     // Lấy thông tin chương để xử lý logic nút bấm
     const ChapterInfo& getChapterAt(int row) const;
 

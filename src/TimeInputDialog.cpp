@@ -18,7 +18,7 @@ TimeInputDialog::TimeInputDialog(QWidget *parent) : QDialog(parent)
     m_timeEdit->setText("00:00:00");
 
     QHBoxLayout *buttonLayout = new QHBoxLayout();
-    m_goButton = new QPushButton(tr("Go"));
+    m_goButton = new QPushButton(tr("Đi"));
     QPushButton *cancelButton = new QPushButton(tr("Cancel"));
     buttonLayout->addStretch();
     buttonLayout->addWidget(m_goButton);

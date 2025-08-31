@@ -14,6 +14,7 @@ class QModelIndex;
 class QSettings;
 class SettingsDialog;
 class ButtonDelegate;
+class QLabel; // Thêm forward declaration
 
 class LibraryWidget : public QWidget
 {
@@ -24,7 +25,6 @@ public:
 
     void scanPathOnStartup(const QString &path);
     void selectBookByPath(const QString &bookPath);
-    // Đã thay đổi: Lấy ChapterInfo thay vì chỉ tên file
     ChapterInfo getChapterInfo(const QString& bookPath, int chapterIndex) const;
     void changeLibraryPath();
     BookInfo getBookByPath(const QString &path) const;
@@ -42,6 +42,11 @@ signals:
 
 public slots:
     void onProgressUpdated(const QString &bookPath, int chapterIndex, qint64 position);
+    // ==================== BẮT ĐẦU THAY ĐỔI ====================
+    // Slot mới để nhận thông tin từ MainWindow
+    void onPlaybackContextChanged(const BookInfo &book, int chapterIndex);
+    // ===================== KẾT THÚC THAY ĐỔI =====================
+
 
 private slots:
     void onRescanLibraryClicked();
@@ -60,7 +65,6 @@ private:
     void scanDirectory(const QString &path);
     qint64 getAudioDuration(const QString &filePath);
     QString getMetadata(const QString &filePath, const char* key);
-    // Đã thay đổi: Hàm cập nhật tiến độ giờ đây dùng ID
     void updateAndSaveChapterProgress(int chapterId, qint64 newPosition);
 
     // UI Components
@@ -72,6 +76,10 @@ private:
     QSplitter *mainSplitter;
     SettingsDialog *m_settingsDialog;
     ButtonDelegate *m_buttonDelegate;
+    // ==================== BẮT ĐẦU THAY ĐỔI ====================
+    QLabel *m_statusLabel; // Label hiển thị trạng thái
+    // ===================== KẾT THÚC THAY ĐỔI =====================
+
 
     // Data Models
     BookModel *m_bookModel;
@@ -79,6 +87,6 @@ private:
 
     // Data Storage
     QList<BookInfo> m_allBooks;
-    QSettings *m_settings; // Vẫn giữ lại để lưu cài đặt UI
+    QSettings *m_settings;
     QString m_libraryPath;
 };

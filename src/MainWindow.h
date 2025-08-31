@@ -2,6 +2,7 @@
 
 #include <QMainWindow>
 #include "DataModels.h"
+#include "AudioEngine.h" // Thêm header để sử dụng enum State
 
 class QStackedWidget;
 class LibraryWidget;
@@ -25,8 +26,12 @@ public slots:
     void applyTheme();
 
 signals:
-    // Tín hiệu này dùng để thông báo cho LibraryWidget cập nhật tiến độ khi Player đang chạy
     void progressUpdated(const QString &bookPath, int chapterIndex, qint64 position);
+    // ==================== BẮT ĐẦU THAY ĐỔI ====================
+    // Tín hiệu mới để thông báo cho các widget khác về sách/chương đang được mở
+    void playbackContextChanged(const BookInfo &book, int chapterIndex);
+    // ===================== KẾT THÚC THAY ĐỔI =====================
+
 
 private slots:
     void onPlayRequest(const BookInfo &book, int chapterIndex);
@@ -35,10 +40,6 @@ private slots:
     void onPlaybackPositionChanged(const QString &bookPath, int chapterIndex, qint64 position);
     void onPlaybackRateChanged(const QString &bookPath, qreal rate);
     
-    // ĐÃ XÓA: Slot này không còn cần thiết vì logic được xử lý trực tiếp trong LibraryWidget
-    // void onChapterProgressChanged(const QString &bookPath, int chapterIndex, qint64 position);
-
-
 private:
     void loadSettings();
     void saveSettings();
@@ -56,4 +57,10 @@ private:
     QAction *m_prevAction;
     QAction *m_rewindAction;
     QAction *m_forwardAction;
+
+    // ==================== BẮT ĐẦU THAY ĐỔI ====================
+    // Biến thành viên để lưu trữ thông tin đang phát hiện tại
+    BookInfo m_currentBook;
+    int m_currentChapterIndex = -1;
+    // ===================== KẾT THÚC THAY ĐỔI =====================
 };
