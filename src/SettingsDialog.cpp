@@ -33,25 +33,10 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     pathGroup->setLayout(pathLayout);
     connect(changePathButton, &QPushButton::clicked, this, &SettingsDialog::onChangePathClicked);
 
-    // --- BƯỚC 1: VÔ HIỆU HÓA GIAO DIỆN CHỦ ĐỀ ---
+    // --- CÁC TÍNH NĂNG ĐANG TẠM VÔ HIỆU HÓA ---
     // QGroupBox *themeGroup = new QGroupBox(tr("Chủ đề"));
-    // themeGroup->setToolTip(tr("Thay đổi giao diện Sáng/Tối (cần khởi động lại)."));
-    // QHBoxLayout *themeLayout = new QHBoxLayout();
-    // m_lightThemeRadio = new QRadioButton(tr("Sáng"));
-    // m_darkThemeRadio = new QRadioButton(tr("Tối"));
-    // themeLayout->addWidget(m_lightThemeRadio);
-    // themeLayout->addWidget(m_darkThemeRadio);
-    // themeGroup->setLayout(themeLayout);
-
-    // --- BƯỚC 1: VÔ HIỆU HÓA GIAO DIỆN NGÔN NGỮ ---
     // QGroupBox *langGroup = new QGroupBox(tr("Ngôn ngữ"));
-    // langGroup->setToolTip(tr("Thay đổi ngôn ngữ hiển thị (cần khởi động lại)."));
-    // QHBoxLayout *langLayout = new QHBoxLayout();
-    // m_languageCombo = new QComboBox();
-    // m_languageCombo->addItem(tr("Tiếng Việt"));
-    // m_languageCombo->addItem(tr("English"));
-    // langLayout->addWidget(m_languageCombo);
-    // langGroup->setLayout(langLayout);
+    // --- KẾT THÚC ---
 
     QGroupBox *seekGroup = new QGroupBox(tr("Tùy chỉnh thời gian tua"));
     QHBoxLayout *seekLayout = new QHBoxLayout();
@@ -103,19 +88,15 @@ void SettingsDialog::setLibraryPath(const QString &path)
 
 void SettingsDialog::loadSettings()
 {
+    // Các cài đặt theme và ngôn ngữ đang bị vô hiệu hóa
     // QString theme = m_settings->value("Settings/theme", "light").toString();
-    // if (theme == "dark") {
-    //     m_darkThemeRadio->setChecked(true);
-    // } else {
-    //     m_lightThemeRadio->setChecked(true);
-    // }
-
     // m_languageCombo->setCurrentIndex(m_settings->value("Settings/language", 0).toInt());
     m_seekTimeSpinBox->setValue(m_settings->value("Settings/seekSeconds", 15).toInt());
 }
 
 void SettingsDialog::onSave()
 {
+    // Các cài đặt theme và ngôn ngữ đang bị vô hiệu hóa
     // m_settings->setValue("Settings/theme", m_darkThemeRadio->isChecked() ? "dark" : "light");
     // m_settings->setValue("Settings/language", m_languageCombo->currentIndex());
     m_settings->setValue("Settings/seekSeconds", m_seekTimeSpinBox->value());
@@ -129,5 +110,6 @@ void SettingsDialog::onSave()
 void SettingsDialog::onChangePathClicked()
 {
     emit changeLibraryPathRequested();
+    // Cập nhật lại label sau khi người dùng có thể đã chọn đường dẫn mới
     setLibraryPath(m_settings->value("Library/path").toString());
 }

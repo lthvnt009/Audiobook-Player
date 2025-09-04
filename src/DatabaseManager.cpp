@@ -4,6 +4,7 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QDebug>
+#include <QSet>
 
 DatabaseManager& DatabaseManager::instance()
 {
@@ -42,8 +43,23 @@ bool DatabaseManager::openDb()
         return false;
     }
 
+    // Bật hỗ trợ foreign key cho SQLite
+    m_db.exec("PRAGMA foreign_keys = ON;");
+
     return initializeTables();
 }
+
+// ==================== BẮT ĐẦU CẢI TIẾN HIỆU NĂNG ====================
+bool DatabaseManager::beginTransaction()
+{
+    return m_db.transaction();
+}
+
+bool DatabaseManager::commitTransaction()
+{
+    return m_db.commit();
+}
+// ===================== KẾT THÚC CẢI TIẾN HIỆU NĂNG =====================
 
 bool DatabaseManager::initializeTables()
 {
@@ -72,7 +88,7 @@ bool DatabaseManager::initializeTables()
                     "listened_duration INTEGER DEFAULT 0, "
                     "format TEXT, "
                     "size INTEGER DEFAULT 0, "
-                    "FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE"
+                    "FOREIGN KEY(book_id) REFERENCES books(id) ON DELETE CASCADE" // ON DELETE CASCADE sẽ tự xóa các chương khi sách bị xóa
                     ")")) {
         qCritical() << "Failed to create chapters table:" << query.lastError().text();
         success = false;
@@ -218,3 +234,42 @@ void DatabaseManager::removeBook(int bookId)
         qWarning() << "Failed to remove book:" << query.lastError().text();
     }
 }
+
+// ==================== BẮT ĐẦU CẢI TIẾN TÍNH TOÀN VẸN DỮ LIỆU ====================
+void DatabaseManager::cleanUpOrphanedRecords(const QList<BookInfo>& booksFromDisk)
+{
+    // 1. Tạo một Set chứa đường dẫn của tất cả các sách có trên ổ đĩa để tra cứu nhanh.
+    QSet<QString> diskBookPaths;
+    for (const auto& book : booksFromDisk) {
+        diskBookPaths.insert(book.path);
+    }
+
+    // 2. Lấy danh sách tất cả đường dẫn sách đang có trong database.
+    QSqlQuery query;
+    query.exec("SELECT path FROM books");
+    QList<QString> dbBookPaths;
+    while (query.next()) {
+        dbBookPaths.append(query.value(0).toString());
+    }
+
+    // 3. Tìm những sách có trong database nhưng không có trên ổ đĩa.
+    QList<QString> orphanedPaths;
+    for (const QString& dbPath : dbBookPaths) {
+        if (!diskBookPaths.contains(dbPath)) {
+            orphanedPaths.append(dbPath);
+        }
+    }
+
+    // 4. Xóa những sách "mồ côi" khỏi database.
+    if (!orphanedPaths.isEmpty()) {
+        qDebug() << "Found" << orphanedPaths.size() << "orphaned books to clean up.";
+        query.prepare("DELETE FROM books WHERE path = ?");
+        for (const QString& path : orphanedPaths) {
+            query.addBindValue(path);
+        }
+        if (!query.execBatch()) {
+            qWarning() << "Failed to execute batch deletion for orphaned books:" << query.lastError();
+        }
+    }
+}
+// ===================== KẾT THÚC CẢI TIẾN TÍNH TOÀN VẸN DỮ LIỆU =====================

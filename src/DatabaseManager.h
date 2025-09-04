@@ -14,6 +14,12 @@ public:
     // Mở và khởi tạo database
     bool openDb();
 
+    // ==================== BẮT ĐẦU CẢI TIẾN HIỆU NĂNG ====================
+    // Các hàm quản lý transaction
+    bool beginTransaction();
+    bool commitTransaction();
+    // ===================== KẾT THÚC CẢI TIẾN HIỆU NĂNG =====================
+
     // Các hàm thao tác với dữ liệu
     bool addOrUpdateBook(BookInfo& book);
     bool addOrUpdateChapter(int bookId, ChapterInfo& chapter);

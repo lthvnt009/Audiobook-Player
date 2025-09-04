@@ -38,14 +38,14 @@ signals:
     void libraryPathSelected(const QString &path);
     void settingsChanged();
     void progressUpdated(const QString &bookPath, int chapterIndex, qint64 position);
+    // ==================== BẮT ĐẦU CẢI TIẾN UX ====================
+    void scanStateChanged(bool isScanning);
+    // ===================== KẾT THÚC CẢI TIẾN UX =====================
 
 
 public slots:
     void onProgressUpdated(const QString &bookPath, int chapterIndex, qint64 position);
-    // ==================== BẮT ĐẦU THAY ĐỔI ====================
-    // Slot mới để nhận thông tin từ MainWindow
     void onPlaybackContextChanged(const BookInfo &book, int chapterIndex);
-    // ===================== KẾT THÚC THAY ĐỔI =====================
 
 
 private slots:
@@ -59,6 +59,9 @@ private slots:
     void onSettingsClicked();
     void onChapterResetClicked(const QModelIndex &index);
     void onChapterDoneClicked(const QModelIndex &index);
+    // ==================== BẮT ĐẦU CẢI TIẾN UX ====================
+    void updateUiForScan(bool isScanning);
+    // ===================== KẾT THÚC CẢI TIẾN UX =====================
 
 
 private:
@@ -76,9 +79,7 @@ private:
     QSplitter *mainSplitter;
     SettingsDialog *m_settingsDialog;
     ButtonDelegate *m_buttonDelegate;
-    // ==================== BẮT ĐẦU THAY ĐỔI ====================
     QLabel *m_statusLabel; // Label hiển thị trạng thái
-    // ===================== KẾT THÚC THAY ĐỔI =====================
 
 
     // Data Models

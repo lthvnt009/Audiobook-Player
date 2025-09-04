@@ -81,13 +81,13 @@ qreal AudioEngine::rate() const
     return m_rate;
 }
 
-// SỬA LỖI BIÊN DỊCH: Triển khai hàm getter
 AudioEngine::State AudioEngine::state() const
 {
     QMutexLocker locker(&m_mutex);
     return m_state;
 }
 
+// Hàm này chỉ điều khiển âm lượng thiết bị, dùng cho fade
 void AudioEngine::setVolume(qreal volume)
 {
     if (m_audioSink && !m_fade_out_requested.load()) {
@@ -95,11 +95,25 @@ void AudioEngine::setVolume(qreal volume)
     }
 }
 
+// ==================== BẮT ĐẦU CẢI TIẾN ÂM LƯỢNG ====================
+// Hàm này điều khiển bộ lọc khuếch đại âm thanh
+void AudioEngine::setSoftwareVolume(qreal amplification)
+{
+    QMutexLocker locker(&m_mutex);
+    if (m_softwareVolume != amplification) {
+        m_softwareVolume = amplification;
+        m_volumeChanged = true;
+    }
+}
+// ===================== KẾT THÚC CẢI TIẾN ÂM LƯỢNG =====================
+
 bool AudioEngine::initialize(const QString &filePath)
 {
     m_fade_out_requested = false;
     m_fadeTimer.invalidate();
     m_pause_request = PauseRequest::None;
+
+    m_posUpdateTimer.start();
 
     std::string path_std = filePath.toStdString();
     if (avformat_open_input(&m_formatCtx, path_std.c_str(), nullptr, nullptr) != 0) {
@@ -152,9 +166,13 @@ bool AudioEngine::initFilterGraph()
     }
     m_filterGraph = avfilter_graph_alloc();
 
+    // ==================== BẮT ĐẦU CẢI TIẾN ÂM LƯỢNG ====================
+    // Lấy thêm bộ lọc 'volume'
     const AVFilter *src = avfilter_get_by_name("abuffer");
     const AVFilter *atempo = avfilter_get_by_name("atempo");
+    const AVFilter *volume = avfilter_get_by_name("volume");
     const AVFilter *sink = avfilter_get_by_name("abuffersink");
+    // ===================== KẾT THÚC CẢI TIẾN ÂM LƯỢNG =====================
 
     AVStream *audioStream = m_formatCtx->streams[m_audioStreamIndex];
     QString args = QString("time_base=%1/%2:sample_rate=%3:sample_fmt=%4:channel_layout=%5")
@@ -177,10 +195,20 @@ bool AudioEngine::initFilterGraph()
     ret = avfilter_graph_create_filter(&atempoCtx, atempo, "atempo", atempo_args.toStdString().c_str(), nullptr, m_filterGraph);
     if (ret < 0) return false;
 
+    // ==================== BẮT ĐẦU CẢI TIẾN ÂM LƯỢNG ====================
+    // Tạo bộ lọc volume
+    AVFilterContext *volumeCtx;
+    QString volume_args = QString("volume=%1").arg(QString::number(m_softwareVolume, 'f', 2));
+    ret = avfilter_graph_create_filter(&volumeCtx, volume, "volume", volume_args.toStdString().c_str(), nullptr, m_filterGraph);
+    if (ret < 0) return false;
+
+    // Liên kết các bộ lọc: src -> atempo -> volume -> sink
     if (avfilter_link(m_srcFilterCtx, 0, atempoCtx, 0) < 0 ||
-        avfilter_link(atempoCtx, 0, m_sinkFilterCtx, 0) < 0) {
+        avfilter_link(atempoCtx, 0, volumeCtx, 0) < 0 ||
+        avfilter_link(volumeCtx, 0, m_sinkFilterCtx, 0) < 0) {
         return false;
     }
+    // ===================== KẾT THÚC CẢI TIẾN ÂM LƯỢNG =====================
 
     return avfilter_graph_config(m_filterGraph, nullptr) >= 0;
 }
@@ -242,6 +270,10 @@ void AudioEngine::run()
         State currentState = m_state;
         qint64 seekRequest = m_seekRequest;
         bool rateChanged = m_rateChanged;
+        // ==================== BẮT ĐẦU CẢI TIẾN ÂM LƯỢNG ====================
+        bool volumeChanged = m_volumeChanged;
+        m_volumeChanged = false;
+        // ===================== KẾT THÚC CẢI TIẾN ÂM LƯỢNG =====================
         m_seekRequest = -1;
         m_rateChanged = false;
         m_mutex.unlock();
@@ -259,9 +291,11 @@ void AudioEngine::run()
             }
         }
 
-        if (rateChanged) {
+        // ==================== BẮT ĐẦU CẢI TIẾN ÂM LƯỢNG ====================
+        if (rateChanged || volumeChanged) {
             initFilterGraph();
         }
+        // ===================== KẾT THÚC CẢI TIẾN ÂM LƯỢNG =====================
 
         PauseRequest pause_req = m_pause_request.exchange(PauseRequest::None);
         if (pause_req == PauseRequest::Suspend && m_audioSink) {
@@ -297,7 +331,12 @@ void AudioEngine::run()
                                 }
                                 
                                 qint64 pos = filt_frame->pts * 1000 * m_formatCtx->streams[m_audioStreamIndex]->time_base.num / m_formatCtx->streams[m_audioStreamIndex]->time_base.den;
-                                emit positionChanged(pos);
+                                
+                                if (m_posUpdateTimer.elapsed() >= POSITION_UPDATE_INTERVAL_MS) {
+                                    emit positionChanged(pos);
+                                    m_posUpdateTimer.restart();
+                                }
+
                                 av_frame_unref(filt_frame);
                             }
                         }

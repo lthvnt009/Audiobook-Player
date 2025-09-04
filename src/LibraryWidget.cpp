@@ -21,6 +21,7 @@
 #include <QSettings>
 #include <QSizePolicy>
 #include <QLabel>
+#include <QApplication> // Thêm thư viện để dùng con trỏ chờ
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -52,9 +53,7 @@ LibraryWidget::LibraryWidget(QWidget *parent) : QWidget(parent)
     mainSplitter = new QSplitter(Qt::Vertical, this);
     booksTableView = new QTableView(this);
     chaptersTableView = new QTableView(this);
-    // ==================== BẮT ĐẦU SỬA LỖI ====================
-    chaptersTableView->setObjectName("chaptersView"); // Đặt tên để styling chính xác hơn
-    // ===================== KẾT THÚC SỬA LỖI =====================
+    chaptersTableView->setObjectName("chaptersView"); 
 
 
     booksTableView->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -96,18 +95,15 @@ LibraryWidget::LibraryWidget(QWidget *parent) : QWidget(parent)
     chaptersTableView->horizontalHeader()->resizeSection(4, 150);
     chaptersTableView->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Interactive);
 
-    // ==================== BẮT ĐẦU SỬA LỖI ====================
     QString styleSheet = R"(
         QTableView::item:selected {
             background-color: #3399ff;
             color: white;
         }
-        /* Style cho label tiến độ khi hàng được chọn */
         #chaptersView QTableView::item:selected QLabel {
             color: white;
             background-color: transparent;
         }
-        /* Style cho label tiến độ khi hàng không được chọn */
         #chaptersView QLabel {
             color: palette(text);
             background-color: transparent;
@@ -118,7 +114,6 @@ LibraryWidget::LibraryWidget(QWidget *parent) : QWidget(parent)
         }
     )";
     this->setStyleSheet(styleSheet);
-    // ===================== KẾT THÚC SỬA LỖI =====================
 
 
     connect(scanLibraryButton, &QPushButton::clicked, this, &LibraryWidget::onRescanLibraryClicked);
@@ -133,7 +128,35 @@ LibraryWidget::LibraryWidget(QWidget *parent) : QWidget(parent)
     
     connect(m_buttonDelegate, &ButtonDelegate::resetClicked, this, &LibraryWidget::onChapterResetClicked);
     connect(m_buttonDelegate, &ButtonDelegate::doneClicked, this, &LibraryWidget::onChapterDoneClicked);
+
+    // ==================== BẮT ĐẦU CẢI TIẾN UX ====================
+    connect(this, &LibraryWidget::scanStateChanged, this, &LibraryWidget::updateUiForScan);
+    // ===================== KẾT THÚC CẢI TIẾN UX =====================
 }
+
+// ==================== BẮT ĐẦU CẢI TIẾN UX ====================
+void LibraryWidget::updateUiForScan(bool isScanning)
+{
+    // Vô hiệu hóa các control chính khi đang quét
+    scanLibraryButton->setEnabled(!isScanning);
+    settingsButton->setEnabled(!isScanning);
+    searchLineEdit->setEnabled(!isScanning);
+    booksTableView->setEnabled(!isScanning);
+    chaptersTableView->setEnabled(!isScanning);
+
+    if (isScanning) {
+        // Hiển thị thông báo và con trỏ chờ
+        m_statusLabel->setText(tr("Đang quét thư viện, vui lòng chờ..."));
+        m_statusLabel->show();
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+    } else {
+        // Khôi phục lại giao diện
+        QApplication::restoreOverrideCursor();
+        // Ẩn thông báo quét, logic khác sẽ quyết định hiển thị thông báo "Đang mở..."
+        m_statusLabel->hide();
+    }
+}
+// ===================== KẾT THÚC CẢI TIẾN UX =====================
 
 void LibraryWidget::onPlaybackContextChanged(const BookInfo &book, int chapterIndex)
 {
@@ -226,9 +249,7 @@ void LibraryWidget::changeLibraryPath()
 void LibraryWidget::onRescanLibraryClicked()
 {
     if (!m_libraryPath.isEmpty()) {
-        // ==================== BẮT ĐẦU SỬA LỖI BIÊN DỊCH ====================
-        scanDirectory(m_libraryPath); // Sửa lỗi 'dirPath' undeclared
-        // ===================== KẾT THÚC SỬA LỖI BIÊN DỊCH =====================
+        scanDirectory(m_libraryPath);
     } else {
         changeLibraryPath();
     }
@@ -335,15 +356,11 @@ void LibraryWidget::onSearchQueryChanged(const QString &text)
         m_bookModel->setBooks(filteredBooks);
     }
     
-    // ==================== BẮT ĐẦU SỬA LỖI ====================
-    // Tự động chọn hàng đầu tiên sau khi tìm kiếm để hiển thị các chương
     if (m_bookModel->rowCount() > 0) {
-        booksTableView->selectRow(0);
+        booksTableView->selectRow(0); 
     } else {
-        // Nếu không có kết quả, xóa danh sách chương
         m_chapterModel->clear();
     }
-    // ===================== KẾT THÚC SỬA LỖI =====================
 }
 
 void LibraryWidget::selectBookByPath(const QString &bookPath)
@@ -432,6 +449,10 @@ void LibraryWidget::onChapterDoneClicked(const QModelIndex &index)
 
 void LibraryWidget::scanDirectory(const QString &path)
 {
+    // ==================== BẮT ĐẦU CẢI TIẾN UX ====================
+    emit scanStateChanged(true);
+    // ===================== KẾT THÚC CẢI TIẾN UX =====================
+
     QList<BookInfo> booksFromDisk;
     QDir rootDir(path);
     QStringList bookDirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
@@ -442,6 +463,8 @@ void LibraryWidget::scanDirectory(const QString &path)
                  
     QStringList imageFilters;
     imageFilters << "cover.jpg" << "cover.png" << "folder.jpg" << "folder.png";
+
+    DatabaseManager::instance().beginTransaction();
 
     for (const QString &bookDirName : bookDirs) {
         BookInfo currentBook;
@@ -484,15 +507,20 @@ void LibraryWidget::scanDirectory(const QString &path)
         booksFromDisk.append(currentBook);
     }
     
+    DatabaseManager::instance().cleanUpOrphanedRecords(booksFromDisk);
+
+    DatabaseManager::instance().commitTransaction();
+    
     m_allBooks = DatabaseManager::instance().getAllBooks();
     onSearchQueryChanged(searchLineEdit->text());
 
-    // ==================== BẮT ĐẦU SỬA LỖI ====================
-    // Sau khi quét xong, tự động chọn hàng đầu tiên nếu có sách
     if (m_bookModel->rowCount() > 0 && booksTableView->selectionModel()->selectedRows().isEmpty()) {
         booksTableView->selectRow(0);
     }
-    // ===================== KẾT THÚC SỬA LỖI =====================
+    
+    // ==================== BẮT ĐẦU CẢI TIẾN UX ====================
+    emit scanStateChanged(false);
+    // ===================== KẾT THÚC CẢI TIẾN UX =====================
 }
 
 void LibraryWidget::onBookSelectionChanged(const QItemSelection &selected, const QItemSelection &deselected)
@@ -536,24 +564,41 @@ QString LibraryWidget::getMetadata(const QString &filePath, const char* key)
     return result;
 }
 
-
 qint64 LibraryWidget::getAudioDuration(const QString &filePath)
 {
     AVFormatContext *formatContext = nullptr;
     qint64 duration = 0;
     std::string path_std = filePath.toStdString();
+
     if (avformat_open_input(&formatContext, path_std.c_str(), nullptr, nullptr) != 0) {
+        qWarning() << "Cannot open file:" << filePath;
         return 0;
     }
+
     if (avformat_find_stream_info(formatContext, nullptr) < 0) {
+        qWarning() << "Cannot find stream info for file:" << filePath;
         avformat_close_input(&formatContext);
         return 0;
     }
+
     if (formatContext->duration != AV_NOPTS_VALUE) {
         duration = formatContext->duration;
         duration = duration / AV_TIME_BASE;
     }
+
+    if (duration <= 0) {
+        for (unsigned int i = 0; i < formatContext->nb_streams; i++) {
+            AVStream *stream = formatContext->streams[i];
+            if (stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                if (stream->duration != AV_NOPTS_VALUE) {
+                    duration = av_rescale_q(stream->duration, stream->time_base, {1, 1});
+                    break;
+                }
+            }
+        }
+    }
+
     avformat_close_input(&formatContext);
-    return duration;
+    return duration > 0 ? duration : 0;
 }
 

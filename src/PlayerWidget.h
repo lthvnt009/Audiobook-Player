@@ -39,10 +39,7 @@ signals:
     void backToLibraryRequest();
     void playbackPositionChanged(const QString &bookPath, int chapterIndex, qint64 position);
     void playbackRateChanged(const QString &bookPath, qreal rate);
-    // ==================== BẮT ĐẦU THAY ĐỔI ====================
-    // Tín hiệu mới để thông báo trạng thái của AudioEngine
     void playbackStateChanged(AudioEngine::State newState);
-    // ===================== KẾT THÚC THAY ĐỔI =====================
 
 
 public slots:
@@ -52,10 +49,7 @@ public slots:
     void onRewindClicked();
     void onForwardClicked();
     void updateToolTips();
-    // ==================== BẮT ĐẦU THAY ĐỔI ====================
-    // Slot mới để cập nhật text dựa trên trạng thái
     void updatePlaybackStatusText(AudioEngine::State newState);
-    // ===================== KẾT THÚC THAY ĐỔI =====================
 
 
 private slots:

@@ -130,21 +130,36 @@ PlayerWidget::PlayerWidget(QWidget *parent) : QWidget(parent)
     nextChapterButton->setIconSize(iconSize);
     nextChapterButton->setIcon(style()->standardIcon(QStyle::SP_MediaSkipForward));
 
+    const QSize smallButtonSize(36, 36);
+    const QSize smallIconSize(20, 20);
+
     muteButton = new QPushButton();
     muteButton->setIcon(style()->standardIcon(QStyle::SP_MediaVolume));
+    muteButton->setFixedSize(smallButtonSize);
+    muteButton->setIconSize(smallIconSize);
+
     volumeSlider = new QSlider(Qt::Horizontal);
-    volumeLabel = new QLabel("100%");
-    volumeSlider->setRange(0, 150);
+    volumeSlider->setRange(0, 200); 
     volumeSlider->setValue(100);
     volumeSlider->setMaximumWidth(100);
-    
-    controlsLayout->addStretch();
+
+    volumeLabel = new QLabel("100%");
+    QFontMetrics fm(volumeLabel->font());
+    // ==================== BẮT ĐẦU SỬA LỖI GIAO DIỆN ====================
+    // Dùng setFixedWidth để cố định chiều rộng, ngăn xê dịch
+    volumeLabel->setFixedWidth(fm.horizontalAdvance("200%"));
+    // Căn lề phải cho số để đẹp hơn
+    volumeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    // ===================== KẾT THÚC SỬA LỖI GIAO DIỆN =====================
+
     controlsLayout->addWidget(prevChapterButton);
     controlsLayout->addWidget(rewindButton);
     controlsLayout->addWidget(playPauseButton);
     controlsLayout->addWidget(forwardButton);
     controlsLayout->addWidget(nextChapterButton);
+    
     controlsLayout->addStretch();
+
     controlsLayout->addWidget(muteButton);
     controlsLayout->addWidget(volumeSlider);
     controlsLayout->addWidget(volumeLabel);
@@ -220,8 +235,7 @@ void PlayerWidget::onSleepButtonClicked()
         m_sleepTimeRemainingSec = 0;
         updateSleepButtonIcon(false);
         m_sleepTimerLabel->setVisible(false);
-        m_audioEngine->setVolume(m_originalVolumeBeforeSleep / 150.0);
-        volumeSlider->setValue(m_originalVolumeBeforeSleep);
+        onVolumeSliderChanged(m_originalVolumeBeforeSleep);
     } else {
         m_sleepTimerDialog->exec();
     }
@@ -244,10 +258,11 @@ void PlayerWidget::onSleepTimerTimeout()
 {
     m_sleepTimeRemainingSec--;
     m_sleepTimerLabel->setText(formatCountdown(m_sleepTimeRemainingSec));
-
-    if (m_sleepTimeRemainingSec > 0 && m_sleepTimeRemainingSec <= 3) {
-        qreal newVolume = m_originalVolumeBeforeSleep * (static_cast<qreal>(m_sleepTimeRemainingSec) / 3.0);
-        volumeSlider->setValue(static_cast<int>(newVolume));
+    
+    if (m_sleepTimeRemainingSec > 0 && m_sleepTimeRemainingSec <= 30) {
+        qreal fadeFactor = static_cast<qreal>(m_sleepTimeRemainingSec) / 30.0;
+        int newVolume = static_cast<int>(m_originalVolumeBeforeSleep * fadeFactor);
+        volumeSlider->setValue(newVolume);
     }
 
     if (m_sleepTimeRemainingSec <= 0) {
@@ -268,36 +283,29 @@ void PlayerWidget::onSleepTimerTimeout()
 
 void PlayerWidget::updateSleepButtonIcon(bool active)
 {
-    // ==================== BẮT ĐẦU THAY ĐỔI ====================
-    // Vẽ icon đồng hồ bằng mã lệnh để đảm bảo tính nhất quán và sửa lỗi thiếu icon.
     int iconSize = 24;
     QPixmap pixmap(iconSize, iconSize);
-    pixmap.fill(Qt::transparent); // Nền trong suốt
+    pixmap.fill(Qt::transparent); 
 
     QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing); // Vẽ cho mịn
+    painter.setRenderHint(QPainter::Antialiasing);
 
-    // Chọn màu dựa trên trạng thái hẹn giờ
     QColor clockColor = active ? QColor("#0078d7") : Qt::gray;
     int centerX = iconSize / 2;
     int centerY = iconSize / 2;
 
-    // Vẽ mặt đồng hồ (hình tròn)
     painter.setPen(QPen(clockColor, 2));
     painter.drawEllipse(2, 2, iconSize - 4, iconSize - 4);
 
-    // Vẽ kim giờ (ngắn, dày)
     painter.setPen(QPen(clockColor, 2.5));
-    painter.drawLine(centerX, centerY, centerX, centerY - 5); // Hướng lên trên
+    painter.drawLine(centerX, centerY, centerX, centerY - 5); 
 
-    // Vẽ kim phút (dài, mỏng)
     painter.setPen(QPen(clockColor, 1.5));
-    painter.drawLine(centerX, centerY, centerX + 6, centerY); // Hướng sang phải
+    painter.drawLine(centerX, centerY, centerX + 6, centerY); 
 
     painter.end();
 
     m_sleepButton->setIcon(QIcon(pixmap));
-    // ===================== KẾT THÚC THAY ĐỔI =====================
 }
 
 void PlayerWidget::seekTo(qint64 positionMs)
@@ -415,11 +423,7 @@ void PlayerWidget::loadBookInfo(const BookInfo &book, int chapterIndex, qreal pl
 
     const ChapterInfo &chapter = m_currentBook.chapters[m_currentChapterIndex];
     
-    // ==================== BẮT ĐẦU THAY ĐỔI ====================
-    // Cập nhật trạng thái text ban đầu.
-    // Trạng thái thực tế sẽ được set trong onEngineStateChanged khi bắt đầu phát.
     updatePlaybackStatusText(AudioEngine::State::Stopped);
-    // ===================== KẾT THÚC THAY ĐỔI =====================
     
     m_duration = chapter.duration * 1000;
     progressSlider->setRange(0, m_duration);
@@ -466,10 +470,7 @@ void PlayerWidget::playChapter(int chapterIndex, qint64 startPosition)
     }
     m_currentChapterIndex = chapterIndex;
     
-    // ==================== BẮT ĐẦU THAY ĐỔI ====================
-    // Cập nhật text ngay khi bắt đầu một chương mới
     updatePlaybackStatusText(AudioEngine::State::Playing);
-    // ===================== KẾT THÚC THAY ĐỔI =====================
     
     m_audioEngine->play(m_currentBook.chapters[m_currentChapterIndex].filePath);
     if (startPosition > 0) {
@@ -499,8 +500,6 @@ void PlayerWidget::onProgressSliderReleased()
     seekTo(progressSlider->value());
 }
 
-// ==================== BẮT ĐẦU THAY ĐỔI ====================
-// Slot mới để cập nhật text
 void PlayerWidget::updatePlaybackStatusText(AudioEngine::State newState)
 {
     if (!isBookLoaded()) {
@@ -526,15 +525,11 @@ void PlayerWidget::updatePlaybackStatusText(AudioEngine::State newState)
     const ChapterInfo &chapter = m_currentBook.chapters[m_currentChapterIndex];
     chapterLabel->setText(statusText.arg(chapter.title));
 }
-// ===================== KẾT THÚC THAY ĐỔI =====================
 
 
 void PlayerWidget::onEngineStateChanged(AudioEngine::State newState)
 {
-    // ==================== BẮT ĐẦU THAY ĐỔI ====================
-    // Phát tín hiệu để MainWindow và các widget khác biết
     emit playbackStateChanged(newState);
-    // ===================== KẾT THÚC THAY ĐỔI =====================
 
     if (newState == AudioEngine::State::Playing) {
         playPauseButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
@@ -587,7 +582,9 @@ void PlayerWidget::onMuteClicked()
 
 void PlayerWidget::onVolumeSliderChanged(int value)
 {
-    m_audioEngine->setVolume(value / 150.0);
+    qreal amplification = value / 100.0; 
+    m_audioEngine->setSoftwareVolume(amplification);
+
     updateVolumeSliderStyle(value);
     volumeLabel->setText(QString::number(value) + "%");
     if (value > 0) {
@@ -604,17 +601,17 @@ void PlayerWidget::updateVolumeSliderStyle(int value)
     QString color;
     if (value <= 100) {
         color = "#4CAF50"; // Green
-    } else if (value <= 125) {
+    } else if (value <= 150) {
         color = "#FFC107"; // Yellow
     } else {
         color = "#F44336"; // Red
     }
-
-    volumeSlider->setStyleSheet(QString(
-        "QSlider::groove:horizontal { border: 1px solid #bbb; background: white; height: 8px; border-radius: 4px; }"
-        "QSlider::sub-page:horizontal { background: %1; border: 1px solid %1; height: 8px; border-radius: 4px; }"
-        "QSlider::handle:horizontal { background: #e0e0e0; border: 1px solid #777; width: 16px; margin: -4px 0; border-radius: 8px; }"
-    ).arg(color));
+    // ==================== BẮT ĐẦU SỬA LỖI GIAO DIỆN ====================
+    // Xóa bỏ hoàn toàn stylesheet. Bằng cách này, cả thanh trượt âm lượng
+    // và thanh tiến độ sẽ cùng sử dụng kiểu dáng gốc của Windows,
+    // đảm bảo chúng giống hệt nhau.
+    volumeSlider->setStyleSheet("");
+    // ===================== KẾT THÚC SỬA LỖI GIAO DIỆN =====================
 }
 
 bool PlayerWidget::isBookLoaded() const
