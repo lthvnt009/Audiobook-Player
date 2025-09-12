@@ -14,7 +14,8 @@ class QModelIndex;
 class QSettings;
 class SettingsDialog;
 class ButtonDelegate;
-class QLabel; // Thêm forward declaration
+class MarqueeLabel;
+class MarqueeDelegate;
 
 class LibraryWidget : public QWidget
 {
@@ -38,9 +39,7 @@ signals:
     void libraryPathSelected(const QString &path);
     void settingsChanged();
     void progressUpdated(const QString &bookPath, int chapterIndex, qint64 position);
-    // ==================== BẮT ĐẦU CẢI TIẾN UX ====================
     void scanStateChanged(bool isScanning);
-    // ===================== KẾT THÚC CẢI TIẾN UX =====================
 
 
 public slots:
@@ -59,9 +58,8 @@ private slots:
     void onSettingsClicked();
     void onChapterResetClicked(const QModelIndex &index);
     void onChapterDoneClicked(const QModelIndex &index);
-    // ==================== BẮT ĐẦU CẢI TIẾN UX ====================
     void updateUiForScan(bool isScanning);
-    // ===================== KẾT THÚC CẢI TIẾN UX =====================
+    void onOpenBookFolder();
 
 
 private:
@@ -79,7 +77,12 @@ private:
     QSplitter *mainSplitter;
     SettingsDialog *m_settingsDialog;
     ButtonDelegate *m_buttonDelegate;
-    QLabel *m_statusLabel; // Label hiển thị trạng thái
+    MarqueeLabel *m_statusLabel;
+    // ==================== BẮT ĐẦU SỬA LỖI MARQUEE ====================
+    // Tạo 2 delegate riêng biệt cho mỗi view
+    MarqueeDelegate *m_bookMarqueeDelegate;
+    MarqueeDelegate *m_chapterMarqueeDelegate;
+    // ===================== KẾT THÚC SỬA LỖI MARQUEE =====================
 
 
     // Data Models
@@ -91,3 +94,4 @@ private:
     QSettings *m_settings;
     QString m_libraryPath;
 };
+

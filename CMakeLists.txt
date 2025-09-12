@@ -1,8 +1,5 @@
-# CMakeLists.txt for Audiobook Player
-
 cmake_minimum_required(VERSION 3.20)
 project(AudiobookPlayer LANGUAGES CXX)
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -18,7 +15,6 @@ find_package(Qt6 COMPONENTS Core Gui Widgets Multimedia Sql REQUIRED)
 set(FFMPEG_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg)
 set(FFMPEG_INCLUDE_DIR ${FFMPEG_DIR}/include)
 set(FFMPEG_LIBRARY_DIR ${FFMPEG_DIR}/lib)
-
 if(EXISTS ${FFMPEG_INCLUDE_DIR} AND EXISTS ${FFMPEG_LIBRARY_DIR})
     message(STATUS "Found local FFmpeg at: ${FFMPEG_DIR}")
 else()
@@ -39,15 +35,16 @@ set(PROJECT_SOURCES
     src/TimeInputDialog.cpp
     src/ButtonDelegate.cpp
     src/SleepTimerDialog.cpp
-    # ==================== BẮT ĐẦU CẢI TIẾN ====================
-    # Thêm các file quản lý database
     src/DatabaseManager.cpp
-    # ===================== KẾT THÚC CẢI TIẾN =====================
+    src/MarqueeLabel.cpp
+    src/MarqueeDelegate.cpp
+    # THÊM FILE MỚI VÀO DANH SÁCH BIÊN DỊCH
+    src/CustomToolTip.cpp
 )
 
 set(PROJECT_RESOURCES src/resources.qrc)
 
-add_executable(${PROJECT_NAME} WIN32 "") 
+add_executable(${PROJECT_NAME} WIN32 "")
 
 qt_add_resources(${PROJECT_NAME} ${PROJECT_RESOURCES})
 
@@ -61,14 +58,13 @@ target_sources(${PROJECT_NAME} PRIVATE ${PROJECT_SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIR})
 
 target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIR})
-target_link_libraries(${PROJECT_NAME} PRIVATE 
-    Qt6::Core 
-    Qt6::Gui 
-    Qt6::Widgets 
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
     Qt6::Multimedia
-    # ==================== BẮT ĐẦU CẢI TIẾN ====================
     Qt6::Sql
-    # ===================== KẾT THÚC CẢI TIẾN =====================
     avformat
     avcodec
     avutil

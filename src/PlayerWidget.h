@@ -3,6 +3,7 @@
 #include <QWidget>
 #include "DataModels.h"
 #include "AudioEngine.h"
+#include "MarqueeLabel.h"
 
 // Forward declarations
 class QPushButton;
@@ -13,6 +14,7 @@ class TimeInputDialog;
 class SleepTimerDialog;
 class QTimer;
 class QSettings;
+class CustomToolTip;
 
 class PlayerWidget : public QWidget
 {
@@ -96,15 +98,19 @@ private:
     QSettings *m_settings;
     
     // UI
+    // ==================== BẮT ĐẦU SỬA LỖI ====================
+    // Thêm khai báo cho biến thành viên m_customToolTip
+    CustomToolTip *m_customToolTip;
+    // ===================== KẾT THÚC SỬA LỖI =====================
     SpeedControlPopup *m_speedPopup;
     TimeInputDialog *m_timeInputDialog;
     SleepTimerDialog *m_sleepTimerDialog;
     
     QPushButton *backButton;
     QLabel *coverLabel;
-    QLabel *titleLabel;
+    MarqueeLabel *titleLabel;
     QLabel *authorLabel;
-    QLabel *chapterLabel;
+    MarqueeLabel *chapterLabel;
     QSlider *progressSlider;
     QLabel *currentTimeLabel;
     QLabel *totalTimeLabel;
@@ -121,3 +127,4 @@ private:
     QPushButton *m_sleepButton;
     QLabel *m_sleepTimerLabel;
 };
+

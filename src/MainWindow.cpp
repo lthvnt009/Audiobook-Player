@@ -153,13 +153,6 @@ void MainWindow::onBackToLibraryRequest()
     playerWidget->stopPlayback();
     stackedWidget->setCurrentWidget(libraryWidget);
     
-    // ==================== BẮT ĐẦU SỬA LỖI ====================
-    // Không xóa trạng thái khi quay lại thư viện.
-    // Chỉ tắt phím tắt toàn cục.
-    // emit playbackContextChanged vẫn được giữ lại trong onPlayRequest và loadSettings
-    // để đảm bảo label được cập nhật đúng lúc.
-    // ===================== KẾT THÚC SỬA LỖI =====================
-
     QString currentBookPath = playerWidget->getCurrentBookPath();
     if (!currentBookPath.isEmpty()) {
         libraryWidget->selectBookByPath(currentBookPath);
@@ -221,7 +214,14 @@ void MainWindow::loadSettings()
     } else {
         playerWidget->showWelcomeState();
         setActionsEnabled(false);
-        QMessageBox::information(this, tr("Chào mừng"), tr("Chào mừng bạn đến với Audiobook Player!\n\nVui lòng chọn thư mục chứa các cuốn sách của bạn để bắt đầu."));
+        // ==================== BẮT ĐẦU CẢI TIẾN ====================
+        // Thêm hướng dẫn quan trọng về cách tổ chức thư mục cho người dùng mới.
+        QMessageBox::information(this, tr("Chào mừng"), 
+            tr("Chào mừng bạn đến với Audiobook Player!\n\n"
+               "Vui lòng chọn thư mục chứa các cuốn sách của bạn để bắt đầu.\n\n"
+               "<b>Lưu ý quan trọng:</b> Mỗi cuốn sách (bao gồm tất cả các chương) "
+               "phải được đặt trong một thư mục riêng."));
+        // ===================== KẾT THÚC CẢI TIẾN =====================
         libraryWidget->changeLibraryPath();
     }
 }
@@ -236,4 +236,3 @@ void MainWindow::saveSettings()
         m_settings->setValue("PlaybackStatus/chapterIndex", playerWidget->getCurrentChapterIndex());
     }
 }
-

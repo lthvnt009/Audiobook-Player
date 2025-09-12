@@ -2,6 +2,8 @@
 #include "SpeedControlPopup.h"
 #include "TimeInputDialog.h"
 #include "SleepTimerDialog.h"
+#include "MarqueeLabel.h"
+#include "CustomToolTip.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -21,6 +23,9 @@
 #include <QMessageBox>
 #include <QIcon>
 #include <QPainter>
+#include <QMouseEvent>
+#include <QStyleOptionSlider>
+#include <QHelpEvent>
 
 // Hàm helper để định dạng thời gian
 QString formatTime(qint64 ms) {
@@ -54,6 +59,9 @@ PlayerWidget::PlayerWidget(QWidget *parent) : QWidget(parent)
     m_sleepTimerDialog = new SleepTimerDialog(this);
     m_settings = new QSettings(this);
     
+    m_customToolTip = new CustomToolTip(this);
+    m_customToolTip->hide();
+
     m_timeButtonTimer = new QTimer(this);
     m_timeButtonTimer->setInterval(250);
     m_timeButtonTimer->setSingleShot(true);
@@ -76,10 +84,18 @@ PlayerWidget::PlayerWidget(QWidget *parent) : QWidget(parent)
     coverLabel->setStyleSheet("border: 1px solid gray; background-color: #e0e0e0;");
     coverLabel->setAlignment(Qt::AlignCenter);
     
-    QVBoxLayout *textInfoLayout = new QVBoxLayout();
-    titleLabel = new QLabel(tr("Tên Sách"));
+    QWidget *textInfoContainer = new QWidget(this);
+    textInfoContainer->setMinimumWidth(0);
+    textInfoContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+    QVBoxLayout *textInfoLayout = new QVBoxLayout(textInfoContainer);
+    textInfoLayout->setContentsMargins(0,0,0,0);
+    
+    titleLabel = new MarqueeLabel(tr("Tên Sách"));
     authorLabel = new QLabel(tr("Tác giả"));
-    chapterLabel = new QLabel(tr("Đang phát: Tên Chương"));
+    authorLabel->setWordWrap(true); 
+    chapterLabel = new MarqueeLabel(tr("Đang phát: Tên Chương"));
+    
     QFont titleFont = titleLabel->font();
     titleFont.setPointSize(16);
     titleFont.setBold(true);
@@ -91,13 +107,14 @@ PlayerWidget::PlayerWidget(QWidget *parent) : QWidget(parent)
     textInfoLayout->addStretch();
     
     infoLayout->addWidget(coverLabel);
-    infoLayout->addLayout(textInfoLayout);
+    infoLayout->addWidget(textInfoContainer, 1);
     mainLayout->addLayout(infoLayout);
     mainLayout->addStretch();
 
     QHBoxLayout *progressLayout = new QHBoxLayout();
     currentTimeLabel = new QLabel("00:00");
     progressSlider = new QSlider(Qt::Horizontal);
+    progressSlider->setMouseTracking(true);
     totalTimeLabel = new QLabel("00:00");
     progressLayout->addWidget(currentTimeLabel);
     progressLayout->addWidget(progressSlider, 1);
@@ -139,18 +156,13 @@ PlayerWidget::PlayerWidget(QWidget *parent) : QWidget(parent)
     muteButton->setIconSize(smallIconSize);
 
     volumeSlider = new QSlider(Qt::Horizontal);
-    volumeSlider->setRange(0, 200); 
-    volumeSlider->setValue(100);
+    volumeSlider->setRange(0, 200);
     volumeSlider->setMaximumWidth(100);
 
     volumeLabel = new QLabel("100%");
     QFontMetrics fm(volumeLabel->font());
-    // ==================== BẮT ĐẦU SỬA LỖI GIAO DIỆN ====================
-    // Dùng setFixedWidth để cố định chiều rộng, ngăn xê dịch
     volumeLabel->setFixedWidth(fm.horizontalAdvance("200%"));
-    // Căn lề phải cho số để đẹp hơn
     volumeLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    // ===================== KẾT THÚC SỬA LỖI GIAO DIỆN =====================
 
     controlsLayout->addWidget(prevChapterButton);
     controlsLayout->addWidget(rewindButton);
@@ -182,7 +194,7 @@ PlayerWidget::PlayerWidget(QWidget *parent) : QWidget(parent)
     mainLayout->addLayout(subControlsLayout);
 
     timeDisplayButton->installEventFilter(this);
-    updateVolumeSliderStyle(100);
+    progressSlider->installEventFilter(this);
     
     updateToolTips();
 
@@ -208,6 +220,9 @@ PlayerWidget::PlayerWidget(QWidget *parent) : QWidget(parent)
     connect(m_sleepTimerDialog, &SleepTimerDialog::timerSet, this, &PlayerWidget::onSetSleepTimer);
     connect(m_sleepCountdownTimer, &QTimer::timeout, this, &PlayerWidget::onSleepTimerTimeout);
 
+    int savedVolume = m_settings->value("Player/volume", 100).toInt();
+    volumeSlider->setValue(savedVolume);
+    onVolumeSliderChanged(savedVolume);
 
     showWelcomeState();
 }
@@ -346,6 +361,84 @@ bool PlayerWidget::eventFilter(QObject *watched, QEvent *event)
             return true;
         }
     }
+    
+    if (watched == progressSlider) {
+        switch (event->type()) {
+            case QEvent::ToolTip:
+                return true; 
+
+            // ==================== BẮT ĐẦU SỬA LỖI TUA CHUỘT DỨT ĐIỂM ====================
+            case QEvent::MouseButtonPress: {
+                auto* mouseEvent = static_cast<QMouseEvent*>(event);
+                if (mouseEvent->button() == Qt::LeftButton) {
+                    QStyleOptionSlider opt;
+                    opt.initFrom(progressSlider);
+                    QRect grooveRect = progressSlider->style()->subControlRect(QStyle::CC_Slider, &opt, QStyle::SC_SliderGroove, progressSlider);
+                    int value = QStyle::sliderValueFromPosition(
+                        progressSlider->minimum(),
+                        progressSlider->maximum(),
+                        mouseEvent->pos().x() - grooveRect.x(),
+                        grooveRect.width(),
+                        progressSlider->invertedAppearance()
+                    );
+                    value = qBound(progressSlider->minimum(), value, progressSlider->maximum());
+                    
+                    // Thực hiện tua ngay lập tức đến đúng giá trị đã tính
+                    seekTo(value);
+
+                    // Quan trọng: Trả về true để "tiêu thụ" sự kiện này.
+                    // Điều này ngăn QSlider chạy hành vi mặc định của nó,
+                    // tránh được lỗi tính toán kép và con trượt bị nhảy.
+                    return true;
+                }
+                break;
+            }
+            // ===================== KẾT THÚC SỬA LỖI TUA CHUỘT DỨT ĐIỂM =====================
+
+            case QEvent::MouseMove: {
+                auto* mouseEvent = static_cast<QMouseEvent*>(event);
+                
+                // Cập nhật tooltip cho cả lúc hover và lúc kéo chuột
+                QStyleOptionSlider opt;
+                opt.initFrom(progressSlider);
+                QRect grooveRect = progressSlider->style()->subControlRect(QStyle::CC_Slider, &opt, QStyle::SC_SliderGroove, progressSlider);
+                
+                if (progressSlider->rect().contains(mouseEvent->pos())) {
+                    int value = QStyle::sliderValueFromPosition(
+                        progressSlider->minimum(),
+                        progressSlider->maximum(),
+                        mouseEvent->pos().x() - grooveRect.x(),
+                        grooveRect.width(),
+                        progressSlider->invertedAppearance()
+                    );
+                    value = qBound(progressSlider->minimum(), value, progressSlider->maximum());
+
+                    m_customToolTip->setText(formatTime(value));
+                    QPoint globalPos = mouseEvent->globalPos();
+                    int popupX = globalPos.x() - (m_customToolTip->width() / 2);
+                    int popupY = globalPos.y() - m_customToolTip->height() - 10;
+                    m_customToolTip->move(popupX, popupY);
+                    m_customToolTip->show();
+                } else {
+                    m_customToolTip->hide();
+                }
+
+                // Nếu đang kéo chuột, hãy để QSlider tự xử lý việc di chuyển con trượt
+                if(mouseEvent->buttons() & Qt::LeftButton) {
+                    return false;
+                }
+
+                return true;
+            }
+            case QEvent::Leave: {
+                m_customToolTip->hide();
+                return true;
+            }
+            default:
+                break;
+        }
+    }
+
     return QWidget::eventFilter(watched, event);
 }
 
@@ -594,6 +687,8 @@ void PlayerWidget::onVolumeSliderChanged(int value)
         m_isMuted = true;
         muteButton->setIcon(style()->standardIcon(QStyle::SP_MediaVolumeMuted));
     }
+    
+    m_settings->setValue("Player/volume", value);
 }
 
 void PlayerWidget::updateVolumeSliderStyle(int value)
@@ -606,12 +701,7 @@ void PlayerWidget::updateVolumeSliderStyle(int value)
     } else {
         color = "#F44336"; // Red
     }
-    // ==================== BẮT ĐẦU SỬA LỖI GIAO DIỆN ====================
-    // Xóa bỏ hoàn toàn stylesheet. Bằng cách này, cả thanh trượt âm lượng
-    // và thanh tiến độ sẽ cùng sử dụng kiểu dáng gốc của Windows,
-    // đảm bảo chúng giống hệt nhau.
     volumeSlider->setStyleSheet("");
-    // ===================== KẾT THÚC SỬA LỖI GIAO DIỆN =====================
 }
 
 bool PlayerWidget::isBookLoaded() const

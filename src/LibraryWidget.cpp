@@ -4,6 +4,8 @@
 #include "SettingsDialog.h"
 #include "ButtonDelegate.h"
 #include "DatabaseManager.h"
+#include "MarqueeLabel.h"
+#include "MarqueeDelegate.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -21,7 +23,10 @@
 #include <QSettings>
 #include <QSizePolicy>
 #include <QLabel>
-#include <QApplication> // Thêm thư viện để dùng con trỏ chờ
+#include <QApplication>
+#include <QDesktopServices>
+#include <QUrl>
+
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -37,7 +42,7 @@ LibraryWidget::LibraryWidget(QWidget *parent) : QWidget(parent)
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(5, 5, 5, 5);
     mainLayout->setSpacing(5);
-    
+
     QWidget *toolbarWidget = new QWidget(this);
     QHBoxLayout *toolbarLayout = new QHBoxLayout(toolbarWidget);
     toolbarLayout->setContentsMargins(0, 0, 0, 0);
@@ -45,7 +50,7 @@ LibraryWidget::LibraryWidget(QWidget *parent) : QWidget(parent)
     searchLineEdit->setPlaceholderText(tr("🔍 Tìm kiếm..."));
     scanLibraryButton = new QPushButton(tr("Quét lại Thư viện 🔄"), this);
     settingsButton = new QPushButton(tr("Cài đặt ⚙️"), this);
-    
+
     toolbarLayout->addWidget(searchLineEdit, 1);
     toolbarLayout->addWidget(scanLibraryButton);
     toolbarLayout->addWidget(settingsButton);
@@ -53,8 +58,7 @@ LibraryWidget::LibraryWidget(QWidget *parent) : QWidget(parent)
     mainSplitter = new QSplitter(Qt::Vertical, this);
     booksTableView = new QTableView(this);
     chaptersTableView = new QTableView(this);
-    chaptersTableView->setObjectName("chaptersView"); 
-
+    chaptersTableView->setObjectName("chaptersView");
 
     booksTableView->setSelectionBehavior(QAbstractItemView::SelectRows);
     chaptersTableView->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -62,8 +66,15 @@ LibraryWidget::LibraryWidget(QWidget *parent) : QWidget(parent)
     booksTableView->setSortingEnabled(true);
     booksTableView->setContextMenuPolicy(Qt::CustomContextMenu);
     chaptersTableView->setSortingEnabled(true);
+
+    booksTableView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+    chaptersTableView->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     
-    chaptersTableView->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    // Kích hoạt tính năng theo dõi chuột để delegate hoạt động
+    booksTableView->setAttribute(Qt::WA_Hover);
+    chaptersTableView->setAttribute(Qt::WA_Hover);
+    booksTableView->viewport()->setMouseTracking(true);
+    chaptersTableView->viewport()->setMouseTracking(true);
 
     scanLibraryButton->setToolTip(tr("Quét lại thư mục thư viện hiện tại để tìm sách mới."));
     settingsButton->setToolTip(tr("Mở cửa sổ Cài đặt."));
@@ -71,26 +82,34 @@ LibraryWidget::LibraryWidget(QWidget *parent) : QWidget(parent)
 
     mainSplitter->addWidget(booksTableView);
     mainSplitter->addWidget(chaptersTableView);
-    
+
     mainLayout->addWidget(toolbarWidget);
     mainLayout->addWidget(mainSplitter, 1);
 
-    m_statusLabel = new QLabel(this);
+    m_statusLabel = new MarqueeLabel("", this);
     m_statusLabel->setObjectName("statusLabel");
     m_statusLabel->setContentsMargins(5, 2, 5, 2);
     m_statusLabel->hide();
     mainLayout->addWidget(m_statusLabel);
 
-
     m_bookModel = new BookModel(this);
     m_chapterModel = new ChapterModel(this);
     booksTableView->setModel(m_bookModel);
     chaptersTableView->setModel(m_chapterModel);
-    
+
     m_buttonDelegate = new ButtonDelegate(this);
     chaptersTableView->setItemDelegateForColumn(4, m_buttonDelegate);
-    
-    chaptersTableView->setMouseTracking(true);
+
+    // ==================== BẮT ĐẦU SỬA LỖI MARQUEE ====================
+    // Khởi tạo 2 delegate riêng biệt, mỗi cái cho một TableView.
+    // Điều này đảm bảo chúng không xung đột và quản lý trạng thái (ô nào đang hover) một cách độc lập.
+    m_bookMarqueeDelegate = new MarqueeDelegate(booksTableView, this);
+    m_chapterMarqueeDelegate = new MarqueeDelegate(chaptersTableView, this);
+
+    // Áp dụng delegate cho cột đầu tiên (Tên sách/Tên chương) của mỗi view
+    booksTableView->setItemDelegateForColumn(0, m_bookMarqueeDelegate);
+    chaptersTableView->setItemDelegateForColumn(0, m_chapterMarqueeDelegate);
+    // ===================== KẾT THÚC SỬA LỖI MARQUEE =====================
 
     chaptersTableView->horizontalHeader()->resizeSection(4, 150);
     chaptersTableView->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Interactive);
@@ -115,29 +134,24 @@ LibraryWidget::LibraryWidget(QWidget *parent) : QWidget(parent)
     )";
     this->setStyleSheet(styleSheet);
 
-
     connect(scanLibraryButton, &QPushButton::clicked, this, &LibraryWidget::onRescanLibraryClicked);
     connect(settingsButton, &QPushButton::clicked, this, &LibraryWidget::onSettingsClicked);
-    
+
     connect(booksTableView->selectionModel(), &QItemSelectionModel::selectionChanged,
             this, &LibraryWidget::onBookSelectionChanged);
     connect(booksTableView, &QTableView::doubleClicked, this, &LibraryWidget::onTableViewDoubleClicked);
     connect(chaptersTableView, &QTableView::doubleClicked, this, &LibraryWidget::onTableViewDoubleClicked);
     connect(searchLineEdit, &QLineEdit::textChanged, this, &LibraryWidget::onSearchQueryChanged);
     connect(booksTableView, &QTableView::customContextMenuRequested, this, &LibraryWidget::showBookContextMenu);
-    
+
     connect(m_buttonDelegate, &ButtonDelegate::resetClicked, this, &LibraryWidget::onChapterResetClicked);
     connect(m_buttonDelegate, &ButtonDelegate::doneClicked, this, &LibraryWidget::onChapterDoneClicked);
 
-    // ==================== BẮT ĐẦU CẢI TIẾN UX ====================
     connect(this, &LibraryWidget::scanStateChanged, this, &LibraryWidget::updateUiForScan);
-    // ===================== KẾT THÚC CẢI TIẾN UX =====================
 }
 
-// ==================== BẮT ĐẦU CẢI TIẾN UX ====================
 void LibraryWidget::updateUiForScan(bool isScanning)
 {
-    // Vô hiệu hóa các control chính khi đang quét
     scanLibraryButton->setEnabled(!isScanning);
     settingsButton->setEnabled(!isScanning);
     searchLineEdit->setEnabled(!isScanning);
@@ -145,18 +159,14 @@ void LibraryWidget::updateUiForScan(bool isScanning)
     chaptersTableView->setEnabled(!isScanning);
 
     if (isScanning) {
-        // Hiển thị thông báo và con trỏ chờ
         m_statusLabel->setText(tr("Đang quét thư viện, vui lòng chờ..."));
         m_statusLabel->show();
         QApplication::setOverrideCursor(Qt::WaitCursor);
     } else {
-        // Khôi phục lại giao diện
         QApplication::restoreOverrideCursor();
-        // Ẩn thông báo quét, logic khác sẽ quyết định hiển thị thông báo "Đang mở..."
         m_statusLabel->hide();
     }
 }
-// ===================== KẾT THÚC CẢI TIẾN UX =====================
 
 void LibraryWidget::onPlaybackContextChanged(const BookInfo &book, int chapterIndex)
 {
@@ -164,7 +174,8 @@ void LibraryWidget::onPlaybackContextChanged(const BookInfo &book, int chapterIn
         m_statusLabel->hide();
     } else {
         const ChapterInfo &chapter = book.chapters[chapterIndex];
-        m_statusLabel->setText(tr("Đang mở: <b>%1</b> - <i>%2</i>").arg(book.title, chapter.title));
+        QString statusText = tr("Đang mở: <b>%1</b> - <i>%2</i>").arg(book.title, chapter.title);
+        m_statusLabel->setText(statusText.remove("<b>").remove("</b>").remove("<i>").remove("</i>"));
         m_statusLabel->show();
     }
 }
@@ -181,10 +192,10 @@ void LibraryWidget::onProgressUpdated(const QString &bookPath, int chapterIndex,
             if (chapterIndex >= 0 && chapterIndex < book.chapters.size()) {
                 book.chapters[chapterIndex].listenedDuration = position;
                 int chapterId = book.chapters[chapterIndex].id;
-                
+
                 m_bookModel->updateBook(book);
                 m_chapterModel->refreshChapterData(chapterIndex, book.chapters[chapterIndex]);
-                
+
                 DatabaseManager::instance().updateChapterProgress(chapterId, position);
                 return;
             }
@@ -226,12 +237,12 @@ void LibraryWidget::restoreLayoutState()
 void LibraryWidget::onSettingsClicked()
 {
     m_settingsDialog->setLibraryPath(m_libraryPath);
-    
+
     connect(m_settingsDialog, &SettingsDialog::changeLibraryPathRequested, this, &LibraryWidget::changeLibraryPath);
     connect(m_settingsDialog, &SettingsDialog::settingsChanged, this, &LibraryWidget::settingsChanged);
-    
+
     m_settingsDialog->exec();
-    
+
     disconnect(m_settingsDialog, &SettingsDialog::changeLibraryPathRequested, this, &LibraryWidget::changeLibraryPath);
     disconnect(m_settingsDialog, &SettingsDialog::settingsChanged, this, &LibraryWidget::settingsChanged);
 }
@@ -293,13 +304,29 @@ void LibraryWidget::showBookContextMenu(const QPoint &pos)
     }
 
     QMenu contextMenu(this);
+
+    QAction *openFolderAction = contextMenu.addAction(tr("Mở thư mục chứa sách"));
+    contextMenu.addSeparator();
+
     QAction *removeFromLibraryAction = contextMenu.addAction(tr("Xóa khỏi thư viện"));
     QAction *deletePermanentlyAction = contextMenu.addAction(tr("Xóa vĩnh viễn"));
-
+    
+    connect(openFolderAction, &QAction::triggered, this, &LibraryWidget::onOpenBookFolder);
     connect(removeFromLibraryAction, &QAction::triggered, this, &LibraryWidget::onRemoveFromLibrary);
     connect(deletePermanentlyAction, &QAction::triggered, this, &LibraryWidget::onDeletePermanently);
 
     contextMenu.exec(booksTableView->viewport()->mapToGlobal(pos));
+}
+
+void LibraryWidget::onOpenBookFolder()
+{
+    QModelIndexList selectedRows = booksTableView->selectionModel()->selectedRows();
+    if (selectedRows.isEmpty()) return;
+
+    int row = selectedRows.first().row();
+    const BookInfo& selectedBook = m_bookModel->getBookAt(row);
+    
+    QDesktopServices::openUrl(QUrl::fromLocalFile(selectedBook.path));
 }
 
 void LibraryWidget::onRemoveFromLibrary()
@@ -328,7 +355,7 @@ void LibraryWidget::onDeletePermanently()
     const BookInfo& selectedBook = m_bookModel->getBookAt(row);
 
     QMessageBox::StandardButton reply;
-    reply = QMessageBox::question(this, tr("Xác nhận Xóa"), 
+    reply = QMessageBox::question(this, tr("Xác nhận Xóa"),
                                   tr("Bạn có chắc chắn muốn xóa vĩnh viễn cuốn sách '%1' và tất cả các file của nó không?\nHành động này không thể hoàn tác.").arg(selectedBook.title),
                                   QMessageBox::Yes | QMessageBox::No);
 
@@ -355,9 +382,9 @@ void LibraryWidget::onSearchQueryChanged(const QString &text)
         }
         m_bookModel->setBooks(filteredBooks);
     }
-    
+
     if (m_bookModel->rowCount() > 0) {
-        booksTableView->selectRow(0); 
+        booksTableView->selectRow(0);
     } else {
         m_chapterModel->clear();
     }
@@ -381,8 +408,8 @@ void LibraryWidget::onTableViewDoubleClicked(const QModelIndex &index)
     if (senderObj == booksTableView) {
         int bookRow = index.row();
         const BookInfo& selectedBook = m_bookModel->getBookAt(bookRow);
-        
-        int chapterToPlay = 0; 
+
+        int chapterToPlay = 0;
         for (int i = 0; i < selectedBook.chapters.size(); ++i) {
             const auto& chapter = selectedBook.chapters[i];
             if (chapter.listenedDuration < chapter.duration * 1000) {
@@ -391,7 +418,7 @@ void LibraryWidget::onTableViewDoubleClicked(const QModelIndex &index)
             }
         }
         emit playRequest(selectedBook, chapterToPlay);
-        
+
     } else if (senderObj == chaptersTableView) {
         if (index.column() == 4) return;
 
@@ -449,9 +476,7 @@ void LibraryWidget::onChapterDoneClicked(const QModelIndex &index)
 
 void LibraryWidget::scanDirectory(const QString &path)
 {
-    // ==================== BẮT ĐẦU CẢI TIẾN UX ====================
     emit scanStateChanged(true);
-    // ===================== KẾT THÚC CẢI TIẾN UX =====================
 
     QList<BookInfo> booksFromDisk;
     QDir rootDir(path);
@@ -460,7 +485,7 @@ void LibraryWidget::scanDirectory(const QString &path)
     QStringList audioFilters;
     audioFilters << "*.mp3" << "*.m4a" << "*.m4b" << "*.ogg" << "*.wma" << "*.flac" << "*.opus"
                  << "*.wav" << "*.aac" << "*.aiff" << "*.ape";
-                 
+
     QStringList imageFilters;
     imageFilters << "cover.jpg" << "cover.png" << "folder.jpg" << "folder.png";
 
@@ -470,7 +495,7 @@ void LibraryWidget::scanDirectory(const QString &path)
         BookInfo currentBook;
         currentBook.title = bookDirName;
         currentBook.path = rootDir.filePath(bookDirName);
-        
+
         QDir bookDir(currentBook.path);
         QStringList audioFiles = bookDir.entryList(audioFilters, QDir::Files, QDir::Name);
         if (audioFiles.isEmpty()) continue;
@@ -491,7 +516,7 @@ void LibraryWidget::scanDirectory(const QString &path)
             chapter.format = fileInfo.suffix().toUpper();
             chapter.size = fileInfo.size();
             chapter.duration = getAudioDuration(chapter.filePath);
-            
+
             if (!authorFound) {
                 QString author = getMetadata(chapter.filePath, "artist");
                 if (author.isEmpty()) author = getMetadata(chapter.filePath, "album_artist");
@@ -506,21 +531,19 @@ void LibraryWidget::scanDirectory(const QString &path)
         }
         booksFromDisk.append(currentBook);
     }
-    
+
     DatabaseManager::instance().cleanUpOrphanedRecords(booksFromDisk);
 
     DatabaseManager::instance().commitTransaction();
-    
+
     m_allBooks = DatabaseManager::instance().getAllBooks();
     onSearchQueryChanged(searchLineEdit->text());
 
     if (m_bookModel->rowCount() > 0 && booksTableView->selectionModel()->selectedRows().isEmpty()) {
         booksTableView->selectRow(0);
     }
-    
-    // ==================== BẮT ĐẦU CẢI TIẾN UX ====================
+
     emit scanStateChanged(false);
-    // ===================== KẾT THÚC CẢI TIẾN UX =====================
 }
 
 void LibraryWidget::onBookSelectionChanged(const QItemSelection &selected, const QItemSelection &deselected)
@@ -601,4 +624,3 @@ qint64 LibraryWidget::getAudioDuration(const QString &filePath)
     avformat_close_input(&formatContext);
     return duration > 0 ? duration : 0;
 }
-

@@ -95,17 +95,15 @@ void AudioEngine::setVolume(qreal volume)
     }
 }
 
-// ==================== BẮT ĐẦU CẢI TIẾN ÂM LƯỢNG ====================
-// Hàm này điều khiển bộ lọc khuếch đại âm thanh
 void AudioEngine::setSoftwareVolume(qreal amplification)
 {
     QMutexLocker locker(&m_mutex);
-    if (m_softwareVolume != amplification) {
-        m_softwareVolume = amplification;
-        m_volumeChanged = true;
+    m_softwareVolume = amplification;
+    if (m_filterGraph) {
+        QString arg = QString::number(amplification);
+        avfilter_graph_send_command(m_filterGraph, "volume", "volume", arg.toStdString().c_str(), nullptr, 0, 0);
     }
 }
-// ===================== KẾT THÚC CẢI TIẾN ÂM LƯỢNG =====================
 
 bool AudioEngine::initialize(const QString &filePath)
 {
@@ -149,6 +147,13 @@ bool AudioEngine::initialize(const QString &filePath)
     format.setSampleFormat(QAudioFormat::Int16);
 
     m_audioSink = new QAudioSink(format, this);
+
+    // ==================== BẮT ĐẦU SỬA LỖI ĐỘ TRỄ ÂM THANH ====================
+    // Tính toán và thiết lập kích thước buffer nhỏ hơn (50ms) để giảm độ trễ
+    int bufferSizeBytes = m_codecCtx->sample_rate * (16 / 8) * m_codecCtx->ch_layout.nb_channels * 0.05; // 50ms
+    m_audioSink->setBufferSize(bufferSizeBytes);
+    // ===================== KẾT THÚC SỬA LỖI ĐỘ TRỄ ÂM THANH =====================
+    
     m_audioDevice = m_audioSink->start();
 
     if (!initFilterGraph()) {
@@ -165,14 +170,12 @@ bool AudioEngine::initFilterGraph()
         avfilter_graph_free(&m_filterGraph);
     }
     m_filterGraph = avfilter_graph_alloc();
+    m_volumeFilterCtx = nullptr;
 
-    // ==================== BẮT ĐẦU CẢI TIẾN ÂM LƯỢNG ====================
-    // Lấy thêm bộ lọc 'volume'
     const AVFilter *src = avfilter_get_by_name("abuffer");
     const AVFilter *atempo = avfilter_get_by_name("atempo");
     const AVFilter *volume = avfilter_get_by_name("volume");
     const AVFilter *sink = avfilter_get_by_name("abuffersink");
-    // ===================== KẾT THÚC CẢI TIẾN ÂM LƯỢNG =====================
 
     AVStream *audioStream = m_formatCtx->streams[m_audioStreamIndex];
     QString args = QString("time_base=%1/%2:sample_rate=%3:sample_fmt=%4:channel_layout=%5")
@@ -195,20 +198,18 @@ bool AudioEngine::initFilterGraph()
     ret = avfilter_graph_create_filter(&atempoCtx, atempo, "atempo", atempo_args.toStdString().c_str(), nullptr, m_filterGraph);
     if (ret < 0) return false;
 
-    // ==================== BẮT ĐẦU CẢI TIẾN ÂM LƯỢNG ====================
-    // Tạo bộ lọc volume
-    AVFilterContext *volumeCtx;
     QString volume_args = QString("volume=%1").arg(QString::number(m_softwareVolume, 'f', 2));
-    ret = avfilter_graph_create_filter(&volumeCtx, volume, "volume", volume_args.toStdString().c_str(), nullptr, m_filterGraph);
-    if (ret < 0) return false;
-
-    // Liên kết các bộ lọc: src -> atempo -> volume -> sink
-    if (avfilter_link(m_srcFilterCtx, 0, atempoCtx, 0) < 0 ||
-        avfilter_link(atempoCtx, 0, volumeCtx, 0) < 0 ||
-        avfilter_link(volumeCtx, 0, m_sinkFilterCtx, 0) < 0) {
+    ret = avfilter_graph_create_filter(&m_volumeFilterCtx, volume, "volume", volume_args.toStdString().c_str(), nullptr, m_filterGraph);
+    if (ret < 0) {
+        m_volumeFilterCtx = nullptr;
         return false;
     }
-    // ===================== KẾT THÚC CẢI TIẾN ÂM LƯỢNG =====================
+
+    if (avfilter_link(m_srcFilterCtx, 0, atempoCtx, 0) < 0 ||
+        avfilter_link(atempoCtx, 0, m_volumeFilterCtx, 0) < 0 ||
+        avfilter_link(m_volumeFilterCtx, 0, m_sinkFilterCtx, 0) < 0) {
+        return false;
+    }
 
     return avfilter_graph_config(m_filterGraph, nullptr) >= 0;
 }
@@ -227,6 +228,7 @@ void AudioEngine::cleanup()
     avformat_close_input(&m_formatCtx);
     av_frame_free(&m_frame);
     av_packet_free(&m_packet);
+    m_volumeFilterCtx = nullptr;
 }
 
 void AudioEngine::run()
@@ -270,10 +272,6 @@ void AudioEngine::run()
         State currentState = m_state;
         qint64 seekRequest = m_seekRequest;
         bool rateChanged = m_rateChanged;
-        // ==================== BẮT ĐẦU CẢI TIẾN ÂM LƯỢNG ====================
-        bool volumeChanged = m_volumeChanged;
-        m_volumeChanged = false;
-        // ===================== KẾT THÚC CẢI TIẾN ÂM LƯỢNG =====================
         m_seekRequest = -1;
         m_rateChanged = false;
         m_mutex.unlock();
@@ -290,12 +288,10 @@ void AudioEngine::run()
                  emit seekFinished();
             }
         }
-
-        // ==================== BẮT ĐẦU CẢI TIẾN ÂM LƯỢNG ====================
-        if (rateChanged || volumeChanged) {
+        
+        if (rateChanged) {
             initFilterGraph();
         }
-        // ===================== KẾT THÚC CẢI TIẾN ÂM LƯỢNG =====================
 
         PauseRequest pause_req = m_pause_request.exchange(PauseRequest::None);
         if (pause_req == PauseRequest::Suspend && m_audioSink) {
@@ -363,3 +359,4 @@ void AudioEngine::run()
     cleanup();
     emit stateChanged(finalState);
 }
+
